@@ -2,7 +2,7 @@ import os
 from flask import Flask, render_template, request, jsonify, send_file, session
 import tempfile
 import logging
-from shift_converter import process_excel_file, generate_ics_file
+from shift_converter import process_excel_file, generate_ics_file, SHIFT_MAP
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -17,6 +17,40 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/shifts', methods=['GET'])
+def get_shifts():
+    # Get shift mappings from session or use default
+    shift_mappings = session.get('shift_mappings', SHIFT_MAP)
+    return jsonify(shift_mappings)
+
+@app.route('/shifts', methods=['POST'])
+def update_shifts():
+    try:
+        new_mappings = request.json
+        if not isinstance(new_mappings, dict):
+            return jsonify({'error': 'Invalid format. Expected dictionary of shift mappings'}), 400
+
+        # Validate the format of each mapping (HHMM-HHMM or OFF)
+        for shift_code, time_range in new_mappings.items():
+            if time_range != "OFF":
+                try:
+                    start, end = time_range.split('-')
+                    # Validate time format
+                    if not (len(start) == 4 and len(end) == 4 and
+                           start.isdigit() and end.isdigit() and
+                           0 <= int(start[:2]) <= 23 and 0 <= int(end[:2]) <= 23 and
+                           0 <= int(start[2:]) <= 59 and 0 <= int(end[2:]) <= 59):
+                        raise ValueError
+                except:
+                    return jsonify({'error': f'Invalid time format for shift code {shift_code}. Use HHMM-HHMM or OFF'}), 400
+
+        # Store in session
+        session['shift_mappings'] = new_mappings
+        return jsonify({'message': 'Shift mappings updated successfully'})
+    except Exception as e:
+        logger.error(f"Error updating shift mappings: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -68,9 +102,12 @@ def generate_calendar():
         if not os.path.exists(file_path):
             return jsonify({'error': 'Excel file not found. Please upload the file again.'}), 400
 
+        # Use custom shift mappings if available
+        shift_mappings = session.get('shift_mappings', SHIFT_MAP)
+
         # Generate ICS file
         logger.info(f"Generating calendar for employee: {employee} using file: {file_path}")
-        ics_path = generate_ics_file(file_path, employee)
+        ics_path = generate_ics_file(file_path, employee, shift_mappings)
 
         return send_file(
             ics_path,

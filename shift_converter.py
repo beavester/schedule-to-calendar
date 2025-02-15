@@ -49,8 +49,8 @@ def parse_time(time_str: str, date_obj: datetime):
         minutes = int(time_str[2:])
         # Create a timezone-aware datetime
         aware_date = date_obj.replace(
-            hour=hours, 
-            minute=minutes, 
+            hour=hours,
+            minute=minutes,
             tzinfo=LOCAL_TZ
         )
         return aware_date
@@ -145,9 +145,12 @@ def process_excel_file(file_path: str):
         logger.error(f"Error processing Excel file: {str(e)}", exc_info=True)
         raise
 
-def generate_ics_file(file_path: str, employee: str):
+def generate_ics_file(file_path: str, employee: str, shift_map=None):
     """Generate ICS file for an employee's schedule."""
     logger.info(f"Generating calendar for employee: {employee}")
+
+    # Use provided shift map or default to SHIFT_MAP
+    current_shift_map = shift_map if shift_map is not None else SHIFT_MAP
 
     try:
         # Read Excel file with date parsing
@@ -228,8 +231,8 @@ def generate_ics_file(file_path: str, employee: str):
             if not shift_code or pd.isna(shift_code):
                 continue
 
-            if shift_code in SHIFT_MAP:
-                shift_times = SHIFT_MAP[shift_code]
+            if shift_code in current_shift_map:
+                shift_times = current_shift_map[shift_code]
                 logger.debug(f"Shift times for {shift_code}: {shift_times}")
 
                 if shift_times == "OFF":
