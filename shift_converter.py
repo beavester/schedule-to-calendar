@@ -60,14 +60,20 @@ def process_excel_file(file_path: str):
 
         # Try to identify date columns by checking each column
         date_columns = []
+        current_year = datetime.now().year
         for col in df.columns:
             # Check if column name can be parsed as a date
             try:
                 if isinstance(col, (datetime, pd.Timestamp)):
+                    # Ensure the year is set to the current year if not specified
+                    if col.year != current_year:
+                        col = col.replace(year=current_year)
                     date_columns.append(col)
                 elif isinstance(col, str):
                     try:
                         date = pd.to_datetime(col)
+                        if date.year != current_year:
+                            date = date.replace(year=current_year)
                         date_columns.append(date)
                     except:
                         pass
@@ -82,10 +88,14 @@ def process_excel_file(file_path: str):
             for col, val in first_row.items():
                 try:
                     if isinstance(val, (datetime, pd.Timestamp)):
+                        if val.year != current_year:
+                            val = val.replace(year=current_year)
                         date_columns.append(val)
                     elif isinstance(val, str):
                         try:
                             date = pd.to_datetime(val)
+                            if date.year != current_year:
+                                date = date.replace(year=current_year)
                             date_columns.append(date)
                         except:
                             pass
@@ -135,6 +145,7 @@ def generate_ics_file(file_path: str, employee: str):
         # Find employee's row and handle first row dates if needed
         employee_row = None
         date_columns = []
+        current_year = datetime.now().year
 
         # Check if dates are in the first row
         first_row = df.iloc[0]
@@ -169,10 +180,18 @@ def generate_ics_file(file_path: str, employee: str):
         for col in df.columns:
             try:
                 if isinstance(col, (datetime, pd.Timestamp)):
+                    # Ensure correct year
+                    if col.year != current_year:
+                        col = col.replace(year=current_year)
                     date_columns.append(col)
                 elif isinstance(col, str):
-                    date = pd.to_datetime(col)
-                    date_columns.append(date)
+                    try:
+                        date = pd.to_datetime(col)
+                        if date.year != current_year:
+                            date = date.replace(year=current_year)
+                        date_columns.append(date)
+                    except:
+                        pass
             except:
                 continue
 
@@ -186,6 +205,10 @@ def generate_ics_file(file_path: str, employee: str):
 
         # Process each date column
         for date_col in date_columns:
+            # Ensure correct year for the date
+            if date_col.year != current_year:
+                date_col = date_col.replace(year=current_year)
+
             shift_code = str(employee_row[date_col]).strip().upper()
             logger.debug(f"Processing date {date_col}: shift code '{shift_code}'")
 
