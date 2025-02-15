@@ -108,13 +108,13 @@ def process_excel_file(file_path: str):
                 df = df.iloc[1:]
 
         if not date_columns:
-            raise ValueError("No date columns found in the Excel file. Please ensure the file contains dates in either the header row or first data row.")
+            raise ValueError("No date columns found in the Excel file")
 
         date_columns = sorted(date_columns)
         start_date = min(date_columns)
         logger.info(f"Start date identified: {start_date}")
 
-        # Find employees (looking in non-date columns)
+        # Find employees
         employees = []
         for idx in range(len(df)):
             row = df.iloc[idx]
@@ -144,7 +144,9 @@ def generate_ics_file(file_path: str, employee: str):
 
         # Find employee's row and handle first row dates if needed
         employee_row = None
+        employee_row_idx = None
         date_columns = []
+        date_column_indices = []
         current_year = datetime.now().year
 
         # Check if dates are in the first row
@@ -152,17 +154,14 @@ def generate_ics_file(file_path: str, employee: str):
         dates_in_first_row = False
         for col, val in first_row.items():
             try:
-                if isinstance(val, (datetime, pd.Timestamp)):
-                    dates_in_first_row = True
-                    break
-                elif isinstance(val, str):
-                    pd.to_datetime(val)
+                if isinstance(val, (datetime, pd.Timestamp)) or pd.to_datetime(str(val)):
                     dates_in_first_row = True
                     break
             except:
                 continue
 
         if dates_in_first_row:
+            logger.info("Dates found in first row, adjusting dataframe")
             df.columns = df.iloc[0]
             df = df.iloc[1:]
 
@@ -171,45 +170,45 @@ def generate_ics_file(file_path: str, employee: str):
             row_values = [str(val).strip() for val in df.iloc[idx].values]
             if employee in row_values:
                 employee_row = df.iloc[idx]
+                employee_row_idx = idx
                 break
 
         if employee_row is None:
             raise ValueError(f"Could not find schedule for employee '{employee}'")
 
-        # Find date columns
-        for col in df.columns:
+        logger.info(f"Found employee row at index {employee_row_idx}")
+
+        # Find date columns and their indices
+        for col_idx, col in enumerate(df.columns):
             try:
                 if isinstance(col, (datetime, pd.Timestamp)):
-                    # Ensure correct year
                     if col.year != current_year:
                         col = col.replace(year=current_year)
                     date_columns.append(col)
+                    date_column_indices.append(col_idx)
                 elif isinstance(col, str):
                     try:
                         date = pd.to_datetime(col)
                         if date.year != current_year:
                             date = date.replace(year=current_year)
                         date_columns.append(date)
+                        date_column_indices.append(col_idx)
                     except:
                         pass
             except:
                 continue
 
-        date_columns.sort()
-        logger.info(f"Processing {len(date_columns)} date columns")
-
         if not date_columns:
             raise ValueError("No date columns found in the Excel file")
 
+        logger.info(f"Found {len(date_columns)} date columns")
+
+        # Create calendar
         cal = Calendar()
 
-        # Process each date column
-        for date_col in date_columns:
-            # Ensure correct year for the date
-            if date_col.year != current_year:
-                date_col = date_col.replace(year=current_year)
-
-            shift_code = str(employee_row[date_col]).strip().upper()
+        # Process each date column using index-based access
+        for date_col, col_idx in zip(date_columns, date_column_indices):
+            shift_code = str(df.iloc[employee_row_idx, col_idx]).strip().upper()
             logger.debug(f"Processing date {date_col}: shift code '{shift_code}'")
 
             if not shift_code or pd.isna(shift_code):
