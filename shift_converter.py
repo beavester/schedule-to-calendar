@@ -3,9 +3,13 @@ from datetime import datetime, timedelta
 from ics import Calendar, Event
 import tempfile
 import logging
+from zoneinfo import ZoneInfo
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+# Set timezone to Eastern Time
+LOCAL_TZ = ZoneInfo("America/New_York")
 
 SHIFT_MAP = {
     "IV": "0600-1400",
@@ -43,7 +47,13 @@ def parse_time(time_str: str, date_obj: datetime):
     try:
         hours = int(time_str[:2])
         minutes = int(time_str[2:])
-        return date_obj.replace(hour=hours, minute=minutes)
+        # Create a timezone-aware datetime
+        aware_date = date_obj.replace(
+            hour=hours, 
+            minute=minutes, 
+            tzinfo=LOCAL_TZ
+        )
+        return aware_date
     except Exception as e:
         logger.error(f"Error parsing time {time_str}: {str(e)}")
         return None
@@ -68,19 +78,19 @@ def process_excel_file(file_path: str):
                     # Ensure the year is set to the current year if not specified
                     if col.year != current_year:
                         col = col.replace(year=current_year)
+                    col = col.replace(tzinfo=LOCAL_TZ)
                     date_columns.append(col)
                 elif isinstance(col, str):
                     try:
                         date = pd.to_datetime(col)
                         if date.year != current_year:
                             date = date.replace(year=current_year)
+                        date = date.replace(tzinfo=LOCAL_TZ)
                         date_columns.append(date)
                     except:
                         pass
             except (ValueError, TypeError):
                 continue
-
-        logger.info(f"Found {len(date_columns)} date columns: {date_columns}")
 
         if not date_columns:
             # If no date columns found in headers, try first row
@@ -90,12 +100,14 @@ def process_excel_file(file_path: str):
                     if isinstance(val, (datetime, pd.Timestamp)):
                         if val.year != current_year:
                             val = val.replace(year=current_year)
+                        val = val.replace(tzinfo=LOCAL_TZ)
                         date_columns.append(val)
                     elif isinstance(val, str):
                         try:
                             date = pd.to_datetime(val)
                             if date.year != current_year:
                                 date = date.replace(year=current_year)
+                            date = date.replace(tzinfo=LOCAL_TZ)
                             date_columns.append(date)
                         except:
                             pass
@@ -184,6 +196,7 @@ def generate_ics_file(file_path: str, employee: str):
                 if isinstance(col, (datetime, pd.Timestamp)):
                     if col.year != current_year:
                         col = col.replace(year=current_year)
+                    col = col.replace(tzinfo=LOCAL_TZ)
                     date_columns.append(col)
                     date_column_indices.append(col_idx)
                 elif isinstance(col, str):
@@ -191,6 +204,7 @@ def generate_ics_file(file_path: str, employee: str):
                         date = pd.to_datetime(col)
                         if date.year != current_year:
                             date = date.replace(year=current_year)
+                        date = date.replace(tzinfo=LOCAL_TZ)
                         date_columns.append(date)
                         date_column_indices.append(col_idx)
                     except:
