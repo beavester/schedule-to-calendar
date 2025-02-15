@@ -48,7 +48,7 @@ fileInput.addEventListener('change', (e) => {
 
 function handleFile(file) {
     if (!file) return;
-    
+
     if (!file.name.endsWith('.xlsx')) {
         showAlert('Please upload an Excel (.xlsx) file');
         return;
@@ -80,7 +80,6 @@ function handleFile(file) {
 
         // Show employee selection section
         employeeSection.classList.remove('d-none');
-        currentFilePath = data.filePath;
         showAlert('File uploaded successfully!', 'success');
     })
     .catch(error => {
@@ -104,13 +103,14 @@ generateButton.addEventListener('click', () => {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            employee: employee,
-            file_path: currentFilePath
+            employee: employee
         })
     })
     .then(response => {
         if (!response.ok) {
-            throw new Error('Failed to generate calendar');
+            return response.json().then(data => {
+                throw new Error(data.error || 'Failed to generate calendar');
+            });
         }
         return response.blob();
     })

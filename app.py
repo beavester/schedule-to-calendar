@@ -1,5 +1,5 @@
 import os
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, session
 import tempfile
 import logging
 from shift_converter import process_excel_file, generate_ics_file
@@ -23,11 +23,11 @@ def upload_file():
     try:
         if 'file' not in request.files:
             return jsonify({'error': 'No file uploaded'}), 400
-        
+
         file = request.files['file']
         if file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
-            
+
         if not file.filename.endswith('.xlsx'):
             return jsonify({'error': 'Invalid file format. Please upload an Excel file (.xlsx)'}), 400
 
@@ -36,9 +36,12 @@ def upload_file():
         temp_path = os.path.join(temp_dir, 'schedule.xlsx')
         file.save(temp_path)
 
+        # Store the file path in session
+        session['excel_file_path'] = temp_path
+
         # Process the Excel file
         employees, start_date = process_excel_file(temp_path)
-        
+
         return jsonify({
             'success': True,
             'employees': employees,
@@ -54,14 +57,21 @@ def generate_calendar():
     try:
         data = request.json
         employee = data.get('employee')
-        file_path = data.get('file_path')
 
-        if not employee or not file_path:
-            return jsonify({'error': 'Missing required parameters'}), 400
+        if not employee:
+            return jsonify({'error': 'Missing employee name'}), 400
+
+        file_path = session.get('excel_file_path')
+        if not file_path:
+            return jsonify({'error': 'No Excel file found. Please upload the file again.'}), 400
+
+        if not os.path.exists(file_path):
+            return jsonify({'error': 'Excel file not found. Please upload the file again.'}), 400
 
         # Generate ICS file
+        logger.info(f"Generating calendar for employee: {employee} using file: {file_path}")
         ics_path = generate_ics_file(file_path, employee)
-        
+
         return send_file(
             ics_path,
             mimetype='text/calendar',
