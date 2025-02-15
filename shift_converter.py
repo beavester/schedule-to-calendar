@@ -53,25 +53,58 @@ def process_excel_file(file_path: str):
     logger.info(f"Processing Excel file: {file_path}")
 
     try:
-        df = pd.read_excel(file_path)
+        # Read Excel file with date parsing
+        df = pd.read_excel(file_path, parse_dates=True)
         logger.info(f"Excel file loaded successfully. Shape: {df.shape}")
+        logger.info(f"Columns: {df.columns.tolist()}")
 
-        # Find date columns
-        date_columns = [col for col in df.columns if isinstance(col, datetime)]
+        # Try to identify date columns by checking each column
+        date_columns = []
+        for col in df.columns:
+            # Check if column name can be parsed as a date
+            try:
+                if isinstance(col, (datetime, pd.Timestamp)):
+                    date_columns.append(col)
+                elif isinstance(col, str):
+                    # Try parsing string as date
+                    pd.to_datetime(col)
+                    date_columns.append(pd.to_datetime(col))
+            except (ValueError, TypeError):
+                continue
+
         logger.info(f"Found {len(date_columns)} date columns: {date_columns}")
 
         if not date_columns:
-            raise ValueError("No date columns found in the Excel file")
+            # If no date columns found in headers, try first row
+            first_row = df.iloc[0]
+            for col, val in first_row.items():
+                try:
+                    if isinstance(val, (datetime, pd.Timestamp)):
+                        date_columns.append(val)
+                    elif isinstance(val, str):
+                        pd.to_datetime(val)
+                        date_columns.append(pd.to_datetime(val))
+                except (ValueError, TypeError):
+                    continue
 
+            if date_columns:
+                logger.info("Found dates in first row, adjusting dataframe")
+                df.columns = df.iloc[0]
+                df = df.iloc[1:]
+
+        if not date_columns:
+            raise ValueError("No date columns found in the Excel file. Please ensure the file contains dates in either the header row or first data row.")
+
+        date_columns = sorted(date_columns)
         start_date = min(date_columns)
         logger.info(f"Start date identified: {start_date}")
 
-        # Find employees
+        # Find employees (looking in non-date columns)
         employees = []
         for idx in range(len(df)):
             row = df.iloc[idx]
             for col in df.columns:
-                if not isinstance(col, datetime):
+                if col not in date_columns:
                     val = str(row[col]).strip()
                     if val and not val.isupper() and val not in SHIFT_MAP:
                         employees.append(val)
