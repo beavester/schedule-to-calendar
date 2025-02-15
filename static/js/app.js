@@ -13,7 +13,10 @@ function showAlert(message, type = 'danger') {
     const alert = document.createElement('div');
     alert.className = `alert alert-${type} alert-dismissible fade show`;
     alert.innerHTML = `
-        ${message}
+        <div class="d-flex align-items-center">
+            <i class="bi ${type === 'danger' ? 'bi-exclamation-circle' : 'bi-check-circle'} me-2"></i>
+            <div>${message}</div>
+        </div>
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     `;
     alertContainer.innerHTML = '';
@@ -23,22 +26,29 @@ function showAlert(message, type = 'danger') {
 function setLoading(loading) {
     loadingIndicator.classList.toggle('d-none', !loading);
     uploadArea.classList.toggle('d-none', loading);
+    if (!loading) {
+        fileInput.value = ''; // Reset file input when loading completes
+    }
 }
 
 uploadArea.addEventListener('dragover', (e) => {
     e.preventDefault();
-    uploadArea.classList.add('border-primary');
+    uploadArea.classList.add('dragover');
 });
 
 uploadArea.addEventListener('dragleave', () => {
-    uploadArea.classList.remove('border-primary');
+    uploadArea.classList.remove('dragover');
 });
 
 uploadArea.addEventListener('drop', (e) => {
     e.preventDefault();
-    uploadArea.classList.remove('border-primary');
+    uploadArea.classList.remove('dragover');
     const file = e.dataTransfer.files[0];
     handleFile(file);
+});
+
+uploadArea.addEventListener('click', () => {
+    fileInput.click();
 });
 
 fileInput.addEventListener('change', (e) => {
@@ -55,6 +65,7 @@ function handleFile(file) {
     }
 
     setLoading(true);
+    employeeSection.classList.add('d-none');
     const formData = new FormData();
     formData.append('file', file);
 
@@ -80,7 +91,7 @@ function handleFile(file) {
 
         // Show employee selection section
         employeeSection.classList.remove('d-none');
-        showAlert('File uploaded successfully!', 'success');
+        showAlert('File uploaded successfully! Please select an employee.', 'success');
     })
     .catch(error => {
         setLoading(false);
@@ -124,7 +135,7 @@ generateButton.addEventListener('click', () => {
         a.click();
         window.URL.revokeObjectURL(url);
         a.remove();
-        showAlert('Calendar file generated successfully!', 'success');
+        showAlert('Calendar generated and downloaded successfully!', 'success');
     })
     .catch(error => {
         setLoading(false);

@@ -1,31 +1,56 @@
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.main-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.navbar {
+    border-bottom: 1px solid var(--bs-border-color);
+    background-color: var(--bs-dark);
+}
+
+.navbar-brand {
+    font-size: 1.5rem;
+    font-weight: 500;
+}
+
+.card {
+    background-color: var(--bs-dark);
+    border: 1px solid var(--bs-border-color);
+    transition: all 0.3s ease;
+}
+
 .upload-area {
     border: 2px dashed var(--bs-border-color);
-    border-radius: 8px;
+    border-radius: 12px;
     transition: all 0.3s ease;
     cursor: pointer;
 }
 
 .upload-area:hover {
     border-color: var(--bs-primary);
+    background-color: rgba(var(--bs-primary-rgb), 0.05);
 }
 
-.upload-area.border-primary {
+.upload-area.dragover {
     border-color: var(--bs-primary);
     background-color: rgba(var(--bs-primary-rgb), 0.1);
+    transform: scale(1.02);
 }
 
-.spinner-border {
-    width: 3rem;
-    height: 3rem;
+.upload-icon {
+    color: var(--bs-primary);
+    transition: transform 0.3s ease;
 }
 
-#loading {
-    margin: 2rem 0;
-}
-
-.card {
-    background-color: var(--bs-dark);
-    border: 1px solid var(--bs-border-color);
+.upload-area:hover .upload-icon {
+    transform: translateY(-5px);
 }
 
 .form-select, .form-control {
@@ -37,4 +62,42 @@
 .form-select:focus, .form-control:focus {
     background-color: var(--bs-dark);
     color: var(--bs-light);
+}
+
+.spinner-growing {
+    width: 3rem;
+    height: 3rem;
+}
+
+.alert {
+    border: none;
+}
+
+.alert-success {
+    background-color: rgba(var(--bs-success-rgb), 0.1);
+    color: var(--bs-success);
+}
+
+.alert-danger {
+    background-color: rgba(var(--bs-danger-rgb), 0.1);
+    color: var(--bs-danger);
+}
+
+.footer {
+    border-top: 1px solid var(--bs-border-color);
+    background-color: var(--bs-dark);
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.alert {
+    animation: fadeIn 0.3s ease;
+}
+
+#employee-section:not(.d-none) {
+    animation: fadeIn 0.3s ease;
 }
