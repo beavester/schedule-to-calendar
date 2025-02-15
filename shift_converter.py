@@ -66,9 +66,11 @@ def process_excel_file(file_path: str):
                 if isinstance(col, (datetime, pd.Timestamp)):
                     date_columns.append(col)
                 elif isinstance(col, str):
-                    # Try parsing string as date
-                    pd.to_datetime(col)
-                    date_columns.append(pd.to_datetime(col))
+                    try:
+                        date = pd.to_datetime(col)
+                        date_columns.append(date)
+                    except:
+                        pass
             except (ValueError, TypeError):
                 continue
 
@@ -82,8 +84,11 @@ def process_excel_file(file_path: str):
                     if isinstance(val, (datetime, pd.Timestamp)):
                         date_columns.append(val)
                     elif isinstance(val, str):
-                        pd.to_datetime(val)
-                        date_columns.append(pd.to_datetime(val))
+                        try:
+                            date = pd.to_datetime(val)
+                            date_columns.append(date)
+                        except:
+                            pass
                 except (ValueError, TypeError):
                     continue
 
@@ -123,30 +128,65 @@ def generate_ics_file(file_path: str, employee: str):
     logger.info(f"Generating calendar for employee: {employee}")
 
     try:
-        df = pd.read_excel(file_path)
+        # Read Excel file with date parsing
+        df = pd.read_excel(file_path, parse_dates=True)
         logger.info("Excel file loaded for calendar generation")
 
-        # Find employee's row
+        # Find employee's row and handle first row dates if needed
         employee_row = None
+        date_columns = []
+
+        # Check if dates are in the first row
+        first_row = df.iloc[0]
+        dates_in_first_row = False
+        for col, val in first_row.items():
+            try:
+                if isinstance(val, (datetime, pd.Timestamp)):
+                    dates_in_first_row = True
+                    break
+                elif isinstance(val, str):
+                    pd.to_datetime(val)
+                    dates_in_first_row = True
+                    break
+            except:
+                continue
+
+        if dates_in_first_row:
+            df.columns = df.iloc[0]
+            df = df.iloc[1:]
+
+        # Find employee's row
         for idx in range(len(df)):
-            if employee in str(df.iloc[idx].values):
+            row_values = [str(val).strip() for val in df.iloc[idx].values]
+            if employee in row_values:
                 employee_row = df.iloc[idx]
                 break
 
         if employee_row is None:
             raise ValueError(f"Could not find schedule for employee '{employee}'")
 
-        logger.info("Found employee's schedule row")
-        cal = Calendar()
+        # Find date columns
+        for col in df.columns:
+            try:
+                if isinstance(col, (datetime, pd.Timestamp)):
+                    date_columns.append(col)
+                elif isinstance(col, str):
+                    date = pd.to_datetime(col)
+                    date_columns.append(date)
+            except:
+                continue
 
-        # Get date columns
-        date_columns = [col for col in df.columns if isinstance(col, datetime)]
         date_columns.sort()
         logger.info(f"Processing {len(date_columns)} date columns")
 
+        if not date_columns:
+            raise ValueError("No date columns found in the Excel file")
+
+        cal = Calendar()
+
         # Process each date column
         for date_col in date_columns:
-            shift_code = str(employee_row[date_col]).strip()
+            shift_code = str(employee_row[date_col]).strip().upper()
             logger.debug(f"Processing date {date_col}: shift code '{shift_code}'")
 
             if not shift_code or pd.isna(shift_code):
@@ -159,10 +199,10 @@ def generate_ics_file(file_path: str, employee: str):
                 if shift_times == "OFF":
                     event = Event()
                     event.name = "OFF"
-                    event.begin = date_col.date()
+                    event.begin = date_col
                     event.make_all_day()
                     cal.events.add(event)
-                    logger.debug(f"Added OFF day event for {date_col.date()}")
+                    logger.debug(f"Added OFF day event for {date_col}")
                 else:
                     try:
                         start_str, end_str = shift_times.split("-")
@@ -188,15 +228,17 @@ def generate_ics_file(file_path: str, employee: str):
             else:
                 event = Event()
                 event.name = f"Unknown Shift: {shift_code}"
-                event.begin = date_col.date()
+                event.begin = date_col
                 event.make_all_day()
                 cal.events.add(event)
-                logger.debug(f"Added unknown shift event for {date_col.date()}: {shift_code}")
+                logger.debug(f"Added unknown shift event for {date_col}: {shift_code}")
 
         # Save to temporary file
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.ics')
+        temp_file.close()  # Close the file before writing
+
         with open(temp_file.name, 'w') as f:
-            f.write(str(cal))
+            f.writelines(cal.serialize_iter())  # Use serialize_iter instead of str()
 
         logger.info(f"Calendar file generated: {temp_file.name}")
         return temp_file.name
