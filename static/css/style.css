@@ -32,7 +32,24 @@ h1 {
     text-align: center;
     color: #8892b0;
     font-size: 16px;
-    margin-bottom: 40px;
+    margin-bottom: 24px;
+}
+
+.instructions {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 30px;
+}
+
+.instructions p {
+    margin: 8px 0;
+    font-size: 15px;
+    color: #a8b2d1;
+}
+
+.instructions strong {
+    color: #4a9eff;
 }
 
 /* Steps */
