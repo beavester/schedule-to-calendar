@@ -106,44 +106,22 @@ def _get_schedule_year(df_raw):
     return fallback
 
 
-def _determine_year_for_month(month, schedule_year, first_month_in_schedule):
-    """
-    Determine the correct year for a given month based on:
-    - schedule_year: year from cell A1
-    - first_month_in_schedule: the first month that appears in the schedule (1-12)
-
-    Logic:
-    - If schedule starts with December (12), then A1 = December's year
-      - December = A1, January-November = A1 + 1
-    - If schedule starts with January-November, then A1 = that month's year
-      - January-November = A1, December = A1 - 1 (previous year's Dec)
-    """
-    if first_month_in_schedule == 12:
-        # Schedule starts in December, so A1 is December's year
-        if month == 12:
-            return schedule_year  # December of A1
-        else:
-            return schedule_year + 1  # January+ of next year
-    else:
-        # Schedule starts in January-November, so A1 is that year
-        if month == 12:
-            return schedule_year - 1  # December of previous year
-        else:
-            return schedule_year  # Same year
-
-
 def _adjust_date_with_year(date_obj, schedule_year, first_month=None):
     """
-    Adjust date year based on schedule_year and schedule context.
+    Simple year adjustment:
+    - A1 contains the PRIMARY year (January's year)
+    - December = A1 - 1 (previous year)
+    - January-November = A1
+
+    Example: A1=2026 means Dec 2025, Jan-Nov 2026
     """
     if date_obj is None:
         return None
 
-    # Default: if no first_month provided, assume January (safest for single-year schedules)
-    if first_month is None:
-        first_month = 1
-
-    correct_year = _determine_year_for_month(date_obj.month, schedule_year, first_month)
+    if date_obj.month == 12:
+        correct_year = schedule_year - 1  # December is previous year
+    else:
+        correct_year = schedule_year  # Jan-Nov is the A1 year
 
     if date_obj.year != correct_year:
         logger.debug(f"Adjusting {date_obj.strftime('%b %d')} from {date_obj.year} to {correct_year}")
