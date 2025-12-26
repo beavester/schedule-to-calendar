@@ -106,24 +106,44 @@ def _get_schedule_year(df_raw):
     return fallback
 
 
-def _adjust_date_with_year(date_obj, schedule_year):
+def _determine_year_for_month(month, schedule_year, first_month_in_schedule):
     """
-    Adjust date year based on schedule_year.
-    - December dates = schedule_year - 1 (previous year)
-    - January-November dates = schedule_year
+    Determine the correct year for a given month based on:
+    - schedule_year: year from cell A1
+    - first_month_in_schedule: the first month that appears in the schedule (1-12)
 
-    This handles schedules that span Dec-Jan (e.g., Dec 2025 - Jan 2026).
+    Logic:
+    - If schedule starts with December (12), then A1 = December's year
+      - December = A1, January-November = A1 + 1
+    - If schedule starts with January-November, then A1 = that month's year
+      - January-November = A1, December = A1 - 1 (previous year's Dec)
+    """
+    if first_month_in_schedule == 12:
+        # Schedule starts in December, so A1 is December's year
+        if month == 12:
+            return schedule_year  # December of A1
+        else:
+            return schedule_year + 1  # January+ of next year
+    else:
+        # Schedule starts in January-November, so A1 is that year
+        if month == 12:
+            return schedule_year - 1  # December of previous year
+        else:
+            return schedule_year  # Same year
+
+
+def _adjust_date_with_year(date_obj, schedule_year, first_month=None):
+    """
+    Adjust date year based on schedule_year and schedule context.
     """
     if date_obj is None:
         return None
 
-    month = date_obj.month
+    # Default: if no first_month provided, assume January (safest for single-year schedules)
+    if first_month is None:
+        first_month = 1
 
-    # December is previous year, everything else is schedule year
-    if month == 12:
-        correct_year = schedule_year - 1
-    else:
-        correct_year = schedule_year
+    correct_year = _determine_year_for_month(date_obj.month, schedule_year, first_month)
 
     if date_obj.year != correct_year:
         logger.debug(f"Adjusting {date_obj.strftime('%b %d')} from {date_obj.year} to {correct_year}")
@@ -156,16 +176,14 @@ def process_excel_file(file_path: str, timeout=30):
 
         if time.time() - start_time_process > timeout: raise TimeoutError("Timeout after loading Excel")
 
-        # Try to identify date columns
-        date_columns = []
-        date_col_map = {} # Map original column name to datetime object
-        dates_in_header = False # *** FIX: Initialize variable ***
+        # STEP 1: Collect raw dates first (to find first month)
+        raw_dates = []  # List of (column_key, date_obj) tuples
+        dates_in_header = False
 
-        # First pass - check column headers
-        logger.debug(f"Checking column headers for dates using year {schedule_year}")
+        # Check column headers for dates
+        logger.debug(f"Checking column headers for dates")
         for col in df.columns:
             if time.time() - start_time_process > timeout: raise TimeoutError("Timeout processing columns")
-            logger.debug(f"Checking if column header '{col}' is a date")
             try:
                 date_obj = None
                 if isinstance(col, (datetime, pd.Timestamp)): date_obj = col
@@ -175,20 +193,13 @@ def process_excel_file(file_path: str, timeout=30):
                 else: continue
 
                 if date_obj:
-                    # Adjust year: Dec = schedule_year-1, Jan-Nov = schedule_year
-                    date_obj = _adjust_date_with_year(date_obj, schedule_year)
-
-                    date_obj_aware = date_obj.replace(tzinfo=LOCAL_TZ)
-                    if date_obj_aware not in date_col_map.values():
-                        date_columns.append(date_obj_aware)
-                        date_col_map[col] = date_obj_aware
-                        logger.debug(f"Found date column from header: {date_obj_aware}")
-                        dates_in_header = True # Set flag if found
+                    raw_dates.append((col, date_obj))
+                    dates_in_header = True
             except Exception as e: logger.debug(f"Error checking header '{col}': {e}")
 
         # If no dates in headers, check first row
         if not dates_in_header and len(df) > 0:
-            logger.debug(f"No date columns found in headers, checking first row using year {schedule_year}")
+            logger.debug(f"No dates in headers, checking first row")
             first_row = df.iloc[0]
             for col_idx, (orig_col_name, val) in enumerate(first_row.items()):
                 if time.time() - start_time_process > timeout: raise TimeoutError("Timeout processing first row")
@@ -201,19 +212,31 @@ def process_excel_file(file_path: str, timeout=30):
                     else: continue
 
                     if date_obj:
-                        # Only adjust year if pandas couldn't determine it (1900)
-                        date_obj = _adjust_date_with_year(date_obj, schedule_year)
-
-                        date_obj_aware = date_obj.replace(tzinfo=LOCAL_TZ)
-                        if date_obj_aware not in date_col_map.values():
-                            date_columns.append(date_obj_aware)
-                            date_col_map[orig_col_name] = date_obj_aware
-                            logger.debug(f"Found date in first row: {date_obj_aware} (orig col: {orig_col_name})")
+                        raw_dates.append((orig_col_name, date_obj))
                 except Exception as e: logger.debug(f"Error checking row 0 val '{val}': {e}")
 
-            if date_columns:
-                logger.info("Found dates in first row, data likely starts from second row.")
-                # Note: Don't modify df here, handle data shift later
+        # STEP 2: Find the first month in the schedule (first column's month)
+        first_month = None
+        if raw_dates:
+            first_month = raw_dates[0][1].month
+            logger.info(f"First month in schedule: {first_month} (1=Jan, 12=Dec)")
+
+        # STEP 3: Now adjust years and build final date structures
+        date_columns = []
+        date_col_map = {}
+
+        for col_key, date_obj in raw_dates:
+            # Adjust year based on first month context
+            date_obj = _adjust_date_with_year(date_obj, schedule_year, first_month)
+            date_obj_aware = date_obj.replace(tzinfo=LOCAL_TZ)
+
+            if date_obj_aware not in date_col_map.values():
+                date_columns.append(date_obj_aware)
+                date_col_map[col_key] = date_obj_aware
+                logger.debug(f"Date column: {col_key} -> {date_obj_aware}")
+
+        if not dates_in_header and date_columns:
+            logger.info("Found dates in first row, data starts from second row.")
 
         if not date_columns: raise ValueError("No valid date columns identified.")
 
@@ -305,12 +328,11 @@ def generate_ics_file(file_path: str, employee: str, shift_map=None, timeout=60)
 
         if time.time() - func_start_time > timeout: raise TimeoutError("Timeout after loading Excel for ICS")
 
-        # --- Date Identification ---
-        date_columns = []
-        date_col_map = {} # Map original column name/index -> datetime object
-        dates_in_header = False # *** FIX: Initialize variable ***
+        # STEP 1: Collect raw dates first (to find first month)
+        raw_dates = []
+        dates_in_header = False
 
-        for col_idx, col_header in enumerate(df.columns):
+        for col_header in df.columns:
             if time.time() - func_start_time > timeout: raise TimeoutError("Timeout finding date headers")
             try:
                 date_obj = None
@@ -321,14 +343,8 @@ def generate_ics_file(file_path: str, employee: str, shift_map=None, timeout=60)
                 else: continue
 
                 if date_obj:
-                    # Only adjust year if pandas couldn't determine it (1900)
-                    date_obj = _adjust_date_with_year(date_obj, schedule_year)
-
-                    date_obj_aware = date_obj.replace(tzinfo=LOCAL_TZ)
-                    if date_obj_aware not in date_col_map.values():
-                         date_columns.append(date_obj_aware)
-                         date_col_map[col_header] = date_obj_aware
-                         dates_in_header = True # Set flag
+                    raw_dates.append((col_header, date_obj))
+                    dates_in_header = True
             except Exception as e: logger.debug(f"ICS Gen Err checking header {col_header}: {e}")
 
         if not dates_in_header and len(df) > 0:
@@ -344,30 +360,35 @@ def generate_ics_file(file_path: str, employee: str, shift_map=None, timeout=60)
                     else: continue
 
                     if date_obj:
-                        # Only adjust year if pandas couldn't determine it (1900)
-                        date_obj = _adjust_date_with_year(date_obj, schedule_year)
-
-                        date_obj_aware = date_obj.replace(tzinfo=LOCAL_TZ)
-                        if date_obj_aware not in date_col_map.values():
-                             date_columns.append(date_obj_aware)
-                             date_col_map[orig_col_name] = date_obj_aware
-                             logger.debug(f"ICS Gen: Found date {date_obj_aware} in row 0, col '{orig_col_name}'")
-
+                        raw_dates.append((orig_col_name, date_obj))
                 except Exception as e: logger.debug(f"ICS Gen Err checking row 0 val {val}: {e}")
 
-            # Determine where actual data starts based on date location
-            if date_columns:
-                logger.info("ICS Gen: Dates found in first row. Data starts from second row.")
-                df_data = df.iloc[1:].reset_index(drop=True)
-            else:
-                 logger.warning("ICS Gen: Dates possibly in header, but none found in first row either. Assuming data starts row 0.")
-                 df_data = df
+        # STEP 2: Find first month
+        first_month = raw_dates[0][1].month if raw_dates else 1
+        logger.info(f"ICS Gen: First month in schedule: {first_month}")
 
-        elif dates_in_header:
-             logger.info("ICS Gen: Dates found in header. Data starts from first row.")
-             df_data = df # Data starts from row 0
+        # STEP 3: Adjust years and build date structures
+        date_columns = []
+        date_col_map = {}
+
+        for col_key, date_obj in raw_dates:
+            date_obj = _adjust_date_with_year(date_obj, schedule_year, first_month)
+            date_obj_aware = date_obj.replace(tzinfo=LOCAL_TZ)
+
+            if date_obj_aware not in date_col_map.values():
+                date_columns.append(date_obj_aware)
+                date_col_map[col_key] = date_obj_aware
+                logger.debug(f"ICS Gen: Date {col_key} -> {date_obj_aware}")
+
+        # Determine where actual data starts
+        if dates_in_header:
+            logger.info("ICS Gen: Dates in header. Data starts from row 0.")
+            df_data = df
+        elif date_columns:
+            logger.info("ICS Gen: Dates in first row. Data starts from row 1.")
+            df_data = df.iloc[1:].reset_index(drop=True)
         else:
-            raise ValueError("ICS Gen: Could not determine date columns structure.")
+            raise ValueError("ICS Gen: No date columns found.")
 
         if not date_columns: raise ValueError("ICS Gen: No date columns identified.")
 
