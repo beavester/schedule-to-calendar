@@ -37,6 +37,9 @@ SHIFT_MAP = {
     "T": "0800-1400",
     "V": "OFF",
     "-": "OFF",
+    "CT": "OFF",
+    "PL": "OFF",
+    "S": "OFF",
     "CL": "0800-1600",
     "HD": "0715-1515",
     "IM": "0800-1400",
@@ -45,7 +48,6 @@ SHIFT_MAP = {
     "BHt": "0700-1500", # Assuming similar to BH
     "Ft": "0700-1500",  # Assuming Full Time Day? Needs verification
     "Bt": "0700-1500",   # Needs verification
-    "CT": "0700-1500"   # Added CT based on log
 }
 
 
