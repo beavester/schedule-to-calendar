@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+.env
+*.spec
+build/
+dist/
+.vs/
+*.ico
+*.bat
+*.txt
+!requirements.txt
