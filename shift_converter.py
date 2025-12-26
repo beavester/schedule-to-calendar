@@ -38,7 +38,7 @@ SHIFT_MAP = {
     "V": "OFF",
     "-": "OFF",
     "CL": "0800-1600",
-    "HD": "0800-1600",
+    "HD": "0715-1515",
     "IM": "0800-1400",
     "PJ": "0700-1300",
     # Added based on logs (assuming they are shifts or need mapping)
@@ -70,30 +70,56 @@ def parse_time(time_str: str, date_obj: datetime):
         logger.error(f"Error parsing time string '{time_str}' for date {date_obj}: {str(e)}")
         return None
 
+def _adjust_date_year_if_needed(date_obj, fallback_year=None):
+    """
+    Only adjust year if pandas parsed it as 1900 (no year in source).
+    Trust years between 2020-2035.
+    """
+    if date_obj is None:
+        return None
+
+    year = date_obj.year
+
+    # Trust reasonable years - pandas parsed correctly
+    if 2020 <= year <= 2035:
+        return date_obj
+
+    # Year 1900 means pandas couldn't determine year from source
+    if year == 1900 and fallback_year:
+        logger.debug(f"Adjusting date {date_obj} from year 1900 to {fallback_year}")
+        return date_obj.replace(year=fallback_year)
+
+    # For other weird years, use fallback if provided
+    if fallback_year and (year < 2000 or year > 2050):
+        logger.debug(f"Adjusting unusual year {year} to {fallback_year}")
+        return date_obj.replace(year=fallback_year)
+
+    return date_obj
+
+
 def _get_schedule_year(df):
-    """Attempts to get the schedule year, defaulting to current year."""
+    """Attempts to get the schedule year from cell A1, defaults to next year if not found."""
     try:
-        # Attempt to read from the first cell (Row 0, Col 0)
         year_val = df.iloc[0, 0]
         if pd.notna(year_val):
-            # Check if it's a number or string representing a plausible year
-            if isinstance(year_val, (int, float)) and 2000 <= year_val <= datetime.now().year + 5:
+            if isinstance(year_val, (int, float)) and 2000 <= year_val <= 2050:
                 logger.info(f"Using schedule year {int(year_val)} found in cell (0,0).")
                 return int(year_val)
             elif isinstance(year_val, str):
                 try:
                     year_int = int(year_val.strip())
-                    if 2000 <= year_int <= datetime.now().year + 5:
+                    if 2000 <= year_int <= 2050:
                         logger.info(f"Using schedule year {year_int} found in cell (0,0).")
                         return year_int
                 except ValueError:
-                    pass # Not a simple year string
+                    pass
     except Exception as e:
-        logger.warning(f"Could not read year from cell (0,0): {e}. Falling back to current year.")
+        logger.warning(f"Could not read year from cell (0,0): {e}")
 
-    current_year = datetime.now().year
-    logger.warning(f"Could not determine specific schedule year from Excel. Using current year: {current_year}")
-    return current_year
+    # Default to next year (schedules are usually for upcoming periods)
+    next_year = datetime.now().year + 1
+    logger.warning(f"Could not determine schedule year. Defaulting to {next_year}")
+    return next_year
 
 
 def process_excel_file(file_path: str, timeout=30):
@@ -139,10 +165,8 @@ def process_excel_file(file_path: str, timeout=30):
                 else: continue
 
                 if date_obj:
-                    # *** Use schedule_year ***
-                    if date_obj.year != schedule_year:
-                         logger.debug(f"Adjusting header date {date_obj} year to {schedule_year}")
-                         date_obj = date_obj.replace(year=schedule_year)
+                    # Only adjust year if pandas couldn't determine it (1900)
+                    date_obj = _adjust_date_year_if_needed(date_obj, schedule_year)
 
                     date_obj_aware = date_obj.replace(tzinfo=LOCAL_TZ)
                     if date_obj_aware not in date_col_map.values():
@@ -167,10 +191,8 @@ def process_excel_file(file_path: str, timeout=30):
                     else: continue
 
                     if date_obj:
-                        # *** Use schedule_year ***
-                        if date_obj.year != schedule_year:
-                            logger.debug(f"Adjusting first row date {date_obj} year to {schedule_year}")
-                            date_obj = date_obj.replace(year=schedule_year)
+                        # Only adjust year if pandas couldn't determine it (1900)
+                        date_obj = _adjust_date_year_if_needed(date_obj, schedule_year)
 
                         date_obj_aware = date_obj.replace(tzinfo=LOCAL_TZ)
                         if date_obj_aware not in date_col_map.values():
@@ -289,10 +311,8 @@ def generate_ics_file(file_path: str, employee: str, shift_map=None, timeout=60)
                 else: continue
 
                 if date_obj:
-                    # *** Use schedule_year ***
-                    if date_obj.year != schedule_year:
-                        logger.debug(f"ICS Gen: Adjusting header date {date_obj} year to {schedule_year}")
-                        date_obj = date_obj.replace(year=schedule_year)
+                    # Only adjust year if pandas couldn't determine it (1900)
+                    date_obj = _adjust_date_year_if_needed(date_obj, schedule_year)
 
                     date_obj_aware = date_obj.replace(tzinfo=LOCAL_TZ)
                     if date_obj_aware not in date_col_map.values():
@@ -314,10 +334,8 @@ def generate_ics_file(file_path: str, employee: str, shift_map=None, timeout=60)
                     else: continue
 
                     if date_obj:
-                        # *** Use schedule_year ***
-                        if date_obj.year != schedule_year:
-                             logger.debug(f"ICS Gen: Adjusting first row date {date_obj} year to {schedule_year}")
-                             date_obj = date_obj.replace(year=schedule_year)
+                        # Only adjust year if pandas couldn't determine it (1900)
+                        date_obj = _adjust_date_year_if_needed(date_obj, schedule_year)
 
                         date_obj_aware = date_obj.replace(tzinfo=LOCAL_TZ)
                         if date_obj_aware not in date_col_map.values():
